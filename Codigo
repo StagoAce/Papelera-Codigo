@@ -1,0 +1,176 @@
+from time import sleep
+from servo import Servo
+motor = Servo(pin=22)  # A changer selon la broche utilisée
+from hcsr04 import HCSR04
+medidor = HCSR04(trigger_pin=5, echo_pin=18, echo_timeout_us=10000)
+
+
+
+try:
+  import urequests as requests
+except:
+  import requests
+
+try:
+  import usocket as socket
+except:
+  import socket
+
+from machine import Pin
+led = Pin(2, Pin.OUT)
+import network
+
+import esp
+esp.osdebug(None)
+
+import gc
+gc.collect()
+
+ssid = 'LAPTOP-K9RVCEBA 9550'
+password = '5]7V89p8'
+
+#Your phone number in international format
+phone_number = '+573136474881'
+#Your callmebot API key
+api_key = '3457514'
+
+station = network.WLAN(network.STA_IF)
+
+station.active(True)
+station.connect(ssid, password)
+
+while station.isconnected() == False:
+  pass
+
+print('Connection successful')
+print(station.ifconfig())
+
+def send_message(phone_number, api_key, message):
+  #set your host URL
+  url = 'https://api.callmebot.com/whatsapp.php?phone='+phone_number+'&text='+message+'&apikey='+api_key
+  #make the request
+  response = requests.get(url)
+  #check if it was successful
+  if response.status_code == 200:
+    print('Mensaje enviado!')
+  else:
+    print('Error')
+    print(response.text)
+
+def web_page():
+  html = """<html>
+<head>
+  <meta http-equiv="refresh" content="3">
+  <title>ESP Web Server</title>
+  <script>
+    // Función para simular el clic automático después de 3 segundos
+    function autoClick() {
+        setTimeout(function() {
+            // Obtener la referencia al botón
+            var boton = document.getElementById("botonAuto");
+            // Simular el clic en el botón
+            boton.click();
+        }, 2900); // 1900 milisegundos
+    }
+</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <style>
+    html {
+      font-family: "Courier New",  Monospace;
+      display: inline-block;
+      margin: 0px auto;
+      text-align: center;
+    }
+    h1 {
+      color: #000000;
+      padding: 2vh;
+    }
+    p {
+      font-size: 1.5rem;
+    }
+    .outline-btn {
+      font-family: "Courier New",  Monospace;
+      background-color: #fff;
+      border: 2px solid #000000;
+      padding: 10px 20px;
+      text-decoration: none;
+      color: #000000;
+      display: inline-block;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.3s ease;
+    }
+    .outline-btn:hover {
+      background-color: #000000;
+      color: #fff;
+    }
+  </style>
+</head>
+<body onload="autoClick()">
+  <div class="container">
+    <h1>ESP32 Web Server</h1>
+  <p>Distancia del sensor: <strong>""" + lectura_distancias + """</strong></p>
+  </div>
+  <div class="container">
+    <p><a href="/?Papelera=abierta"><button class="outline-btn">Abrir papelera</button></a></p>
+    <p style="display: none;"><a href="/?Papelera=cerrada"><button id="botonAuto"></button></a></p>
+  </div>
+</body>
+</html>"""
+  return html
+
+message1 = 'La%20papelera%20esta%20abierta' #YOUR MESSAGE HERE (URL ENCODED)https://www.urlencoder.io/
+message2 = 'La%20papelera%20esta%20cerrada'
+message3 = 'La%20papelera%20ha%20sido%20manipulada%20por%20la%20pagina%20web'
+
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('', 80))
+s.listen(5)
+
+motor.move(7)
+
+sw=0
+
+while True:
+  gc.collect()
+  conn, addr = s.accept()
+  print('Got a connection from %s' % str(addr))
+  request = conn.recv(1024)
+  request = str(request)
+  print('Content = %s' % request)
+  lec_dis = medidor.distance_cm()
+  lectura_distancias = str(lec_dis)
+  Pap_ab = request.find('/?Papelera=abierta')
+  print(Pap_ab)
+  Pap_ce = request.find('/?Papelera=cerrada')
+  if Pap_ab == 6:
+      gc.collect()
+      motor.move(110)
+      led.value(1)
+      send_message(phone_number, api_key, message3)
+      sleep(2)
+      motor.move(7)
+      led.value(0)
+  else:
+        if lec_dis <= 25 and sw == 0:
+            gc.collect()
+            send_message(phone_number, api_key, message1)
+            led.on()
+            motor.move(110)
+            sw = 1
+            sleep(2)
+        elif lec_dis > 25 and sw == 1:
+            gc.collect()
+            send_message(phone_number, api_key, message2)
+            led.off()
+            motor.move(7)
+            sw = 0
+            sleep(2)
+  response = web_page()
+  conn.send('HTTP/1.1 200 OK\n')
+  conn.send('Content-Type: text/html\n')
+  conn.send('Connection: close\n\n')
+  conn.sendall(response)
+  conn.close()
